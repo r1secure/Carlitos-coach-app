@@ -1,0 +1,9 @@
+videos/*
+
+
+__pycache__
+venv
+.env*
+backend/.env*
+frontend/.env*
+
