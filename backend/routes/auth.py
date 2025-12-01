@@ -8,6 +8,7 @@ import httpx
 from database import get_db
 from models.user import User, UserRole
 from schemas.auth import Token, UserResponse, GoogleAuthRequest, TokenData
+from pydantic import BaseModel
 from core.security import create_access_token, create_refresh_token, ALGORITHM, SECRET_KEY
 from config import settings
 
@@ -59,7 +60,13 @@ async def login_google(request: GoogleAuthRequest, db: Session = Depends(get_db)
             email=user_info["email"],
             full_name=user_info.get("name"),
             avatar_url=user_info.get("picture"),
-            role=UserRole.PLAYER # Default role
+            role=UserRole.PLAYER, # Default role
+            validation_status="PENDING",
+            permissions={
+                "can_view_knowledge_base": True,
+                "can_upload_videos": True,
+                "can_use_virtual_coach": True
+            }
         )
         db.add(user)
         db.commit()
@@ -82,3 +89,22 @@ async def login_google(request: GoogleAuthRequest, db: Session = Depends(get_db)
     }
 
 
+class TestLoginRequest(BaseModel):
+    email: str
+
+@router.post("/auth/login/test", response_model=Token)
+async def login_test(request: TestLoginRequest, db: Session = Depends(get_db)):
+    # Find User
+    user = db.query(User).filter(User.email == request.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Generate Tokens
+    access_token = create_access_token(subject=user.id)
+    refresh_token = create_refresh_token(subject=user.id)
+    
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }

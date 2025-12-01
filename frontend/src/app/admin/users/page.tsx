@@ -22,6 +22,8 @@ interface User {
     full_name: string | null
     role: 'admin' | 'coach' | 'player'
     is_active: boolean
+    validation_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+    permissions: { [key: string]: boolean }
     created_at: string
 }
 
@@ -31,13 +33,15 @@ export default function AdminUsersPage() {
     const [users, setUsers] = useState<User[]>([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
+    const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [updating, setUpdating] = useState(false)
 
     // Edit form state
     const [editRole, setEditRole] = useState<'admin' | 'coach' | 'player'>('player')
-    const [editActive, setEditActive] = useState(true)
+    const [editValidationStatus, setEditValidationStatus] = useState<'PENDING' | 'APPROVED' | 'REJECTED'>('PENDING')
+    const [editPermissions, setEditPermissions] = useState<{ [key: string]: boolean }>({})
 
     useEffect(() => {
         if (currentUser && currentUser.role !== 'admin') {
@@ -69,7 +73,8 @@ export default function AdminUsersPage() {
     const handleEditClick = (user: User) => {
         setSelectedUser(user)
         setEditRole(user.role)
-        setEditActive(user.is_active)
+        setEditValidationStatus(user.validation_status)
+        setEditPermissions(user.permissions || {})
         setIsDialogOpen(true)
     }
 
@@ -77,27 +82,50 @@ export default function AdminUsersPage() {
         if (!selectedUser || !token) return
         setUpdating(true)
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/users/${selectedUser.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({
-                    role: editRole,
-                    is_active: editActive
-                })
-            })
+            // Update Role and Status
+            // We can use the generic update or specific endpoints.
+            // Let's use specific endpoints for clarity as per backend implementation.
 
-            if (response.ok) {
-                // Update local state
-                setUsers(users.map(u => u.id === selectedUser.id ? { ...u, role: editRole, is_active: editActive } : u))
-                setIsDialogOpen(false)
-                toast.success("Utilisateur mis à jour avec succès")
-            } else {
-                const errorData = await response.json()
-                toast.error(`Erreur: ${errorData.detail}`)
+            // 1. Validate Status
+            if (editValidationStatus !== selectedUser.validation_status) {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/users/${selectedUser.id}/validate?status=${editValidationStatus}`, {
+                    method: 'PUT',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
             }
+
+            // 2. Update Permissions
+            // Check if permissions changed
+            if (JSON.stringify(editPermissions) !== JSON.stringify(selectedUser.permissions)) {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/users/${selectedUser.id}/permissions`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(editPermissions)
+                })
+            }
+
+            // 3. Update Role (using generic update if needed, or we assume role update is separate?
+            // The previous code used generic update for role and is_active.
+            // Let's keep using generic update for role.
+            if (editRole !== selectedUser.role) {
+                await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/users/${selectedUser.id}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ role: editRole })
+                })
+            }
+
+            // Refresh list
+            fetchUsers()
+            setIsDialogOpen(false)
+            toast.success("Utilisateur mis à jour avec succès")
+
         } catch (error) {
             console.error('Failed to update user:', error)
             toast.error('Une erreur est survenue lors de la mise à jour')
@@ -106,16 +134,27 @@ export default function AdminUsersPage() {
         }
     }
 
-    const filteredUsers = users.filter(user =>
-        user.email.toLowerCase().includes(search.toLowerCase()) ||
-        (user.full_name && user.full_name.toLowerCase().includes(search.toLowerCase()))
-    )
+    const filteredUsers = users.filter(user => {
+        const matchesSearch = user.email.toLowerCase().includes(search.toLowerCase()) ||
+            (user.full_name && user.full_name.toLowerCase().includes(search.toLowerCase()))
+        const matchesStatus = statusFilter === 'ALL' || user.validation_status === statusFilter
+        return matchesSearch && matchesStatus
+    })
 
     const getRoleBadge = (role: string) => {
         switch (role) {
             case 'admin': return <Badge variant="destructive" className="gap-1"><ShieldAlert className="h-3 w-3" /> Admin</Badge>
             case 'coach': return <Badge variant="default" className="bg-blue-600 gap-1"><ShieldCheck className="h-3 w-3" /> Coach</Badge>
             default: return <Badge variant="secondary" className="gap-1"><Shield className="h-3 w-3" /> Joueur</Badge>
+        }
+    }
+
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'APPROVED': return <Badge variant="outline" className="text-green-600 border-green-600">Approuvé</Badge>
+            case 'PENDING': return <Badge variant="outline" className="text-yellow-600 border-yellow-600">En attente</Badge>
+            case 'REJECTED': return <Badge variant="outline" className="text-red-600 border-red-600">Rejeté</Badge>
+            default: return <Badge variant="outline">Inconnu</Badge>
         }
     }
 
@@ -130,7 +169,7 @@ export default function AdminUsersPage() {
                     <div>
                         <h1 className="text-3xl font-bold tracking-tight">Gestion des Utilisateurs</h1>
                         <p className="text-muted-foreground mt-2">
-                            Gérez les rôles et les accès des utilisateurs.
+                            Gérez les rôles, validations et permissions.
                         </p>
                     </div>
                     <Link href="/dashboard">
@@ -144,15 +183,28 @@ export default function AdminUsersPage() {
                 <Card>
                     <CardHeader>
                         <div className="flex justify-between items-center">
-                            <CardTitle>Utilisateurs ({users.length})</CardTitle>
-                            <div className="relative w-64">
-                                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    placeholder="Rechercher..."
-                                    className="pl-8"
-                                    value={search}
-                                    onChange={(e) => setSearch(e.target.value)}
-                                />
+                            <CardTitle>Utilisateurs ({filteredUsers.length})</CardTitle>
+                            <div className="flex gap-2">
+                                <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
+                                    <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="Filtrer par statut" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="ALL">Tous les statuts</SelectItem>
+                                        <SelectItem value="PENDING">En attente</SelectItem>
+                                        <SelectItem value="APPROVED">Approuvé</SelectItem>
+                                        <SelectItem value="REJECTED">Rejeté</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                <div className="relative w-64">
+                                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                                    <Input
+                                        placeholder="Rechercher..."
+                                        className="pl-8"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                    />
+                                </div>
                             </div>
                         </div>
                     </CardHeader>
@@ -176,10 +228,7 @@ export default function AdminUsersPage() {
                                         </TableCell>
                                         <TableCell>{getRoleBadge(user.role)}</TableCell>
                                         <TableCell>
-                                            {user.is_active ?
-                                                <Badge variant="outline" className="text-green-600 border-green-600">Actif</Badge> :
-                                                <Badge variant="outline" className="text-red-600 border-red-600">Inactif</Badge>
-                                            }
+                                            {getStatusBadge(user.validation_status)}
                                         </TableCell>
                                         <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
                                         <TableCell className="text-right">
@@ -237,17 +286,54 @@ export default function AdminUsersPage() {
                                     Statut
                                 </Label>
                                 <Select
-                                    value={editActive ? "active" : "inactive"}
-                                    onValueChange={(value) => setEditActive(value === "active")}
+                                    value={editValidationStatus}
+                                    onValueChange={(value: 'PENDING' | 'APPROVED' | 'REJECTED') => setEditValidationStatus(value)}
                                 >
                                     <SelectTrigger className="col-span-3">
                                         <SelectValue placeholder="Sélectionner un statut" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="active">Actif</SelectItem>
-                                        <SelectItem value="inactive">Inactif</SelectItem>
+                                        <SelectItem value="PENDING">En attente</SelectItem>
+                                        <SelectItem value="APPROVED">Approuvé</SelectItem>
+                                        <SelectItem value="REJECTED">Rejeté</SelectItem>
                                     </SelectContent>
                                 </Select>
+                            </div>
+
+                            <div className="col-span-4 border-t pt-4 mt-2">
+                                <h4 className="mb-4 text-sm font-medium leading-none">Permissions</h4>
+                                <div className="space-y-4">
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="perm_kb"
+                                            className="h-4 w-4 rounded border-gray-300"
+                                            checked={editPermissions.can_view_knowledge_base || false}
+                                            onChange={(e) => setEditPermissions({ ...editPermissions, can_view_knowledge_base: e.target.checked })}
+                                        />
+                                        <Label htmlFor="perm_kb">Accès Base de Connaissances</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="perm_upload"
+                                            className="h-4 w-4 rounded border-gray-300"
+                                            checked={editPermissions.can_upload_videos || false}
+                                            onChange={(e) => setEditPermissions({ ...editPermissions, can_upload_videos: e.target.checked })}
+                                        />
+                                        <Label htmlFor="perm_upload">Upload de Vidéos</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <input
+                                            type="checkbox"
+                                            id="perm_coach"
+                                            className="h-4 w-4 rounded border-gray-300"
+                                            checked={editPermissions.can_use_virtual_coach || false}
+                                            onChange={(e) => setEditPermissions({ ...editPermissions, can_use_virtual_coach: e.target.checked })}
+                                        />
+                                        <Label htmlFor="perm_coach">Coach Virtuel</Label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <DialogFooter>

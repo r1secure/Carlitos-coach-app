@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import Link from 'next/link'
 import { LogOut, BookOpen, Settings, FileVideo } from 'lucide-react'
+import { PermissionGuard } from '@/components/auth/PermissionGuard'
 
 export default function DashboardPage() {
     const { user, logout } = useAuth()
@@ -30,39 +31,43 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <Card className="flex flex-col h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <BookOpen className="h-5 w-5" />
-                                Base de connaissances
-                            </CardTitle>
-                            <CardDescription>
-                                Accédez aux exercices et programmes
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="mt-auto">
-                            <Link href="/knowledge-base">
-                                <Button className="w-full">Accéder</Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
+                    <PermissionGuard permission="can_view_knowledge_base">
+                        <Card className="flex flex-col h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <BookOpen className="h-5 w-5" />
+                                    Base de connaissances
+                                </CardTitle>
+                                <CardDescription>
+                                    Accédez aux exercices et programmes
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="mt-auto">
+                                <Link href="/knowledge-base">
+                                    <Button className="w-full">Accéder</Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </PermissionGuard>
 
-                    <Card className="flex flex-col h-full">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <FileVideo className="h-5 w-5" />
-                                Mes Vidéos
-                            </CardTitle>
-                            <CardDescription>
-                                Uploadez et gérez vos vidéos
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="mt-auto">
-                            <Link href="/dashboard/videos">
-                                <Button className="w-full">Gérer</Button>
-                            </Link>
-                        </CardContent>
-                    </Card>
+                    <PermissionGuard permission="can_upload_videos">
+                        <Card className="flex flex-col h-full">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <FileVideo className="h-5 w-5" />
+                                    Mes Vidéos
+                                </CardTitle>
+                                <CardDescription>
+                                    Uploadez et gérez vos vidéos
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="mt-auto">
+                                <Link href="/dashboard/videos">
+                                    <Button className="w-full">Gérer</Button>
+                                </Link>
+                            </CardContent>
+                        </Card>
+                    </PermissionGuard>
 
                     <Card className="flex flex-col h-full">
                         <CardHeader>

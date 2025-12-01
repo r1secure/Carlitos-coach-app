@@ -38,11 +38,21 @@ export function FeedbackDisplay({ feedback, onGenerate, loading }: FeedbackDispl
     return (
         <div className="space-y-4">
             <Card className="bg-zinc-900 border-zinc-800 text-white">
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="flex items-center gap-2">
                         <Sparkles className="h-5 w-5 text-yellow-500" />
                         Analyse du Coach Virtuel
                     </CardTitle>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={onGenerate}
+                        disabled={loading}
+                        className="text-zinc-400 hover:text-white"
+                    >
+                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                        Régénérer
+                    </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     {/* Focus Area */}

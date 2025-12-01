@@ -95,11 +95,19 @@ export default function KnowledgeBasePage() {
 
     return (
         <div className="container mx-auto py-8 px-4">
-            <div className="mb-8 text-center">
-                <h1 className="text-4xl font-bold mb-4">Base de Connaissances</h1>
-                <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-                    Explorez notre bibliothèque d'exercices, de conseils et de programmes d'entraînement pour améliorer votre tennis.
-                </p>
+            <div className="mb-8">
+                <Link href="/dashboard">
+                    <Button variant="ghost" className="mb-4 pl-0 hover:pl-2 transition-all">
+                        <ArrowRight className="mr-2 h-4 w-4 rotate-180" />
+                        Retour au tableau de bord
+                    </Button>
+                </Link>
+                <div className="text-center">
+                    <h1 className="text-4xl font-bold mb-4">Base de Connaissances</h1>
+                    <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+                        Explorez notre bibliothèque d'exercices, de conseils et de programmes d'entraînement pour améliorer votre tennis.
+                    </p>
+                </div>
             </div>
 
             {/* Search and Filters */}

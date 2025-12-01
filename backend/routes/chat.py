@@ -68,15 +68,14 @@ async def send_chat_message(
 
     # Generate AI response
     # We need to fetch history for context
-    history = db.query(ChatMessage).filter(
+    history_msgs = db.query(ChatMessage).filter(
         ChatMessage.session_id == session.id
     ).order_by(ChatMessage.created_at).all()
 
-    messages = [{"role": "system", "content": llm_service.system_prompt_template.format(session_id=str(session.id))}]
-    for msg in history:
-        messages.append({"role": msg.role, "content": msg.content})
+    # Convert to format expected by LLMService
+    history = [{"role": msg.role, "content": msg.content} for msg in history_msgs]
 
-    ai_content = await llm_service.generate_chat_response(messages)
+    ai_content = await llm_service.generate_chat_response(chat_data.message, history)
 
     # Save AI message
     ai_msg = ChatMessage(

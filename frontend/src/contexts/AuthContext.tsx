@@ -9,6 +9,14 @@ interface User {
     full_name: string
     avatar_url: string
     role: 'admin' | 'coach' | 'player'
+    validation_status: 'PENDING' | 'APPROVED' | 'REJECTED'
+    permissions: {
+        can_view_knowledge_base?: boolean
+        can_upload_videos?: boolean
+        can_use_virtual_coach?: boolean
+        can_manage_users?: boolean
+        [key: string]: boolean | undefined
+    }
     // Profile Fields
     first_name?: string | null
     last_name?: string | null
@@ -97,7 +105,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(data.access_token)
 
             await checkAuth()
-            router.push('/dashboard')
+
+            // We need to fetch the user again or get it from the response if we returned it (login endpoint returns token only)
+            // checkAuth updates the user state, but it's async and state update might not be immediate in this scope.
+            // However, checkAuth waits for the fetch.
+            // But we can't access the updated 'user' state variable here immediately because of closure.
+            // We should probably return the user from checkAuth or fetch it here.
+
+            // Let's fetch user info directly here to decide redirection, or rely on checkAuth to set state and then use a separate effect?
+            // Simpler: fetch user info here.
+            const userResponse = await fetch(`${API_URL}/api/v1/users/me`, {
+                headers: { 'Authorization': `Bearer ${data.access_token}` }
+            })
+            const userData = await userResponse.json()
+
+            if (userData.validation_status === 'PENDING') {
+                router.push('/pending')
+            } else if (userData.validation_status === 'REJECTED') {
+                // Maybe show an error or redirect to a rejected page
+                router.push('/pending') // Reuse pending page with a message?
+            } else {
+                router.push('/dashboard')
+            }
         } catch (error) {
             console.error('Login error:', error)
             throw error

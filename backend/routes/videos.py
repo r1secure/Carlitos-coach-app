@@ -344,6 +344,18 @@ async def get_video_analysis(
         # Or just 404. 404 is fine.
         raise HTTPException(status_code=404, detail="Analysis not found")
         
+    print(f"DEBUG: GET /analysis - Video {video_id}")
+    print(f"DEBUG: Analysis Status: {analysis.status}")
+    if analysis.data:
+        print(f"DEBUG: Analysis Data Frames: {len(analysis.data)}")
+    else:
+        print(f"DEBUG: Analysis Data is EMPTY")
+        
+    if analysis.ai_feedback:
+        print(f"DEBUG: AI Feedback Keys: {analysis.ai_feedback.keys()}")
+    else:
+        print(f"DEBUG: AI Feedback is None")
+
     return {
         "id": str(analysis.id),
         "video_id": str(analysis.video_id),
@@ -526,6 +538,7 @@ async def list_all_videos(
 @router.post("/{video_id}/feedback")
 async def generate_video_feedback(
     video_id: str,
+    force_regenerate: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -552,10 +565,8 @@ async def generate_video_feedback(
     if analysis.status != AnalysisStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Analysis not completed yet")
         
-    # If feedback already exists, return it (cache)
-    # Unless we want to force regeneration? Let's assume force=False for now.
-    # We can add a query param later.
-    if analysis.ai_feedback:
+    # If feedback already exists, return it (cache) unless forced
+    if analysis.ai_feedback and not force_regenerate:
         return analysis.ai_feedback
         
     # Prepare data for LLM
@@ -576,6 +587,8 @@ async def generate_video_feedback(
         "stroke_type": video.extra_metadata.get("stroke_type", "Unknown") if video.extra_metadata else "Unknown",
         "metrics": _extract_summary_metrics(analysis.data)
     }
+    
+    print(f"DEBUG: Analysis Data sent to LLM: {analysis_data}")
     
     # Fetch available drills
     from models.drill import Drill

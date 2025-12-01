@@ -58,7 +58,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ${HOME}/.ollama:/root/.ollama
 
   # FastAPI Backend
   backend:
@@ -73,6 +73,10 @@ services:
       - DATABASE_URL=postgresql://carlitos:carlitos@postgres:5432/carlitos_db
       - MINIO_ENDPOINT=minio:9000
       - REDIS_URL=redis://redis:6379/0
+      - LITELLM_API_BASE=https://litellm2stech-internal-prod.cbp-generalprod.com/
+      - LITELLM_API_KEY=sk-2108
+      - LLM_PROVIDER=openai
+      - LLM_MODEL=bedrock-claude-3-5-sonnet
     ports:
       - "8000:8000"
     volumes:

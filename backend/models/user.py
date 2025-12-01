@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Boolean, Enum, DateTime
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 import uuid
 import enum
@@ -41,3 +41,7 @@ class User(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    # Validation & Permissions
+    validation_status = Column(Enum("PENDING", "APPROVED", "REJECTED", name="validation_status"), default="PENDING", nullable=False)
+    permissions = Column(JSONB, default={}, nullable=False)

@@ -1,177 +1,135 @@
 import json
-from typing import Dict, List, Optional
-from google import genai
-from google.genai import types
-from config import settings
 import logging
-import uuid
+from typing import Dict, List, Optional, Any
+from litellm import completion
+from config import settings
 
 logger = logging.getLogger(__name__)
 
 class LLMService:
     def __init__(self):
-        logger.info(f"DEBUG: GEMINI_API_KEY loaded: {settings.GEMINI_API_KEY[:4]}... (len={len(settings.GEMINI_API_KEY)})")
+        self.provider = settings.LLM_PROVIDER
+        self.model = settings.LLM_MODEL
         
-        # Initialize Google GenAI Client
-        if settings.GEMINI_API_KEY:
-            self.client = genai.Client(api_key=settings.GEMINI_API_KEY, http_options={'api_version': 'v1alpha'})
+        # Handle different providers
+        if self.provider == "ollama":
+            self.api_base = settings.OLLAMA_API_BASE
+            self.api_key = None
         else:
-            self.client = None
-            logger.warning("GEMINI_API_KEY is missing. LLM features will be disabled.")
+            # Generic LiteLLM / OpenAI compatible
+            self.api_base = settings.LITELLM_API_BASE
+            self.api_key = settings.LITELLM_API_KEY
+        
+        logger.info(f"LLM Service initialized with provider: {self.provider}, model: {self.model}")
+        if self.api_base:
+             logger.info(f"API Base: {self.api_base}")
 
-        self.model = "gemini-2.0-flash-exp" # Using a modern model compatible with v1alpha/genai sdk
-        
-        self.system_prompt_template = """
-        You are an expert Tennis Coach named "Carlitos Coach". (Session: {session_id})
-        Your goal is to analyze biomechanical data from tennis players and provide actionable, encouraging, and technical feedback.
-        
-        You will receive JSON data containing:
-        - Stroke type (Forehand, Backhand, Serve, etc.)
-        - Player level (Beginner, Intermediate, Advanced)
-        - Key biomechanical metrics (angles, velocities)
-        - Identified phases of the stroke
-        
-        Your output must be a JSON object with the following structure:
-        {{
-            "strengths": ["List of 1-3 things the player did well"],
-            "weaknesses": ["List of 1-3 major issues detected"],
-            "tips": ["List of 1-3 actionable tips to correct the issues"],
-            "focus_area": "One specific area to focus on (e.g., 'Racket Preparation', 'Knee Bend')"
-        }}
-        
-        Keep your tone professional, encouraging, and concise. Use tennis terminology correctly.
+    async def generate_feedback(self, analysis_data: Dict[str, Any], available_drills: List[Dict[str, str]] = []) -> Dict[str, Any]:
         """
-
-    async def generate_feedback(self, analysis_data: Dict, available_drills: List[Dict] = []) -> Dict:
+        Generates feedback based on the analysis data using the configured LLM.
         """
-        Generates feedback based on analysis data using the LLM.
-        """
-        if not self.client:
-            return {
-                "strengths": ["LLM API Key not configured"],
-                "weaknesses": [],
-                "tips": ["Please configure GEMINI_API_KEY in backend settings."],
-                "focus_area": "Configuration",
-                "recommended_drills": []
-            }
-
         try:
-            # Construct the user message with the analysis data and available drills
-            drills_context = ""
-            if available_drills:
-                drills_list = "\n".join([f"- {d['title']} (ID: {d['id']}, Focus: {d['focus_area']})" for d in available_drills])
-                drills_context = f"""
-                Available Drills in Knowledge Base:
-                {drills_list}
-                
-                Based on the analysis, recommend 1-2 specific drills from this list if relevant. 
-                Include the exact ID of the recommended drills in the 'recommended_drills' list in your JSON output.
-                """
-
-            user_message = f"""
-            Analyze this tennis stroke:
-            Stroke: {analysis_data.get('stroke_type', 'Unknown')}
-            Metrics: {json.dumps(analysis_data.get('metrics', {}), indent=2)}
+            # Format available drills for the prompt
+            drills_text = "\n".join([f"- {d['title']} (ID: {d['id']}): {d.get('focus_area', '')}" for d in available_drills])
             
-            {drills_context}
+            # Construct a prompt based on the analysis data
+            system_prompt = f"""You are an expert tennis coach. 
+            Analyze the following biomechanical data from a tennis shot and provide constructive feedback.
+            Focus on key mechanics like body rotation, arm angles, and timing.
+            
+            Available Drills:
+            {drills_text}
+            
+            Provide specific drills to improve, selecting from the available drills list if relevant.
+            Format your response as a JSON object with the following keys:
+            - "focus_area": The main technical aspect to focus on (e.g. "Ball Toss", "Knee Bend").
+            - "strengths": A list of things done well.
+            - "weaknesses": A list of areas for improvement.
+            - "tips": A list of actionable advice or cues.
+            - "recommended_drills": A list of drill IDs (e.g. ["drill-id-1", "drill-id-2"]).
             """
             
-            # Format system prompt
-            system_prompt = self.system_prompt_template.format(session_id=str(uuid.uuid4())) + """
-            Your output must be a JSON object with the following structure:
-            {
-                "strengths": ["List of 1-3 things the player did well"],
-                "weaknesses": ["List of 1-3 major issues detected"],
-                "tips": ["List of 1-3 actionable tips to correct the issues"],
-                "focus_area": "One specific area to focus on",
-                "recommended_drills": ["List of Drill IDs (UUIDs) from the available list"]
-            }
-            """
+            user_message = f"Analysis Data: {json.dumps(analysis_data, indent=2)}"
 
-            logger.info("Sending feedback generation request to Google GenAI...")
+            logger.info(f"Sending request to LLM ({self.model})...")
             
-            response = self.client.models.generate_content(
+            response = completion(
                 model=self.model,
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part(text=system_prompt),
-                            types.Part(text=user_message)
-                        ]
-                    )
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
                 ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
-                )
+                api_base=self.api_base,
+                api_key=self.api_key,
+                custom_llm_provider=self.provider,
+                response_format={ "type": "json_object" }
             )
 
-            content = response.text
-            logger.info(f"DEBUG: Raw LLM response: {content}")
-            
-            return json.loads(content)
+            # Extract the JSON response
+            try:
+                content = response.choices[0].message.content
+                feedback = json.loads(content)
+                
+                # Unwrap 'data' key if present (some models wrap the response)
+                if "data" in feedback and isinstance(feedback["data"], dict):
+                    feedback = feedback["data"]
+                    
+                return feedback
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse LLM response as JSON: {content}")
+                return {
+                    "summary": "Error parsing AI feedback.",
+                    "strengths": [],
+                    "improvements": [],
+                    "drills": []
+                }
+            except Exception as e:
+                logger.error(f"Error processing LLM response: {e}")
+                return {
+                    "summary": "Error processing AI feedback.",
+                    "strengths": [],
+                    "improvements": [],
+                    "drills": []
+                }
 
         except Exception as e:
-            import traceback
-            logger.error(f"LLM Generation Error: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Error generating feedback: {e}")
             return {
+                "summary": "Unable to generate feedback at this time.",
                 "strengths": [],
-                "weaknesses": ["Error generating feedback"],
-                "tips": ["Please try again later."],
-                "focus_area": "System Error",
-                "recommended_drills": []
+                "improvements": [],
+                "drills": []
             }
 
-    async def generate_chat_response(self, messages: List[Dict]) -> str:
+    async def generate_chat_response(self, message: str, history: List[Dict[str, str]]) -> str:
         """
-        Generates a chat response based on message history.
+        Generates a response to a chat message, considering the chat history.
         """
-        if not self.client:
-            return "Je ne suis pas correctement configuré (Clé API manquante)."
-
         try:
-            logger.info("Sending chat request to Google GenAI...")
+            system_prompt = "You are a helpful and encouraging tennis coach. Answer questions about tennis technique, strategy, and training."
             
-            # Convert message history to Google GenAI format
-            genai_messages = []
+            messages = [{"role": "system", "content": system_prompt}]
             
-            # Add system prompt as the first user message (or system instruction if supported, but simpler to prepend)
-            system_prompt = self.system_prompt_template.format(session_id=str(uuid.uuid4()))
+            # Add history
+            for msg in history:
+                role = "user" if msg["role"] == "user" else "assistant"
+                messages.append({"role": role, "content": msg["content"]})
             
-            # We need to construct the history. Google GenAI expects a list of Content objects.
-            # We'll prepend the system prompt to the first message or send it as a separate turn if needed.
-            # For simplicity, we'll use the 'system_instruction' parameter if available, or just prepend context.
-            
-            # Using system_instruction in config is cleaner for v1alpha
-            config = types.GenerateContentConfig(
-                system_instruction=system_prompt
-            )
-            
-            for msg in messages:
-                role = "user" if msg["role"] == "user" else "model"
-                # Skip system messages in the history list as we handle it via config or context
-                if msg["role"] == "system":
-                    continue
-                    
-                genai_messages.append(types.Content(
-                    role=role,
-                    parts=[types.Part(text=msg["content"])]
-                ))
+            # Add current message
+            messages.append({"role": "user", "content": message})
 
-            response = self.client.models.generate_content(
+            response = completion(
                 model=self.model,
-                contents=genai_messages,
-                config=config
+                messages=messages,
+                api_base=self.api_base,
+                api_key=self.api_key,
+                custom_llm_provider=self.provider
             )
-            
-            print(f"DEBUG: Full LLM Response: {response}")
-            return response.text
+
+            return response.choices[0].message.content
 
         except Exception as e:
-            import traceback
-            logger.error(f"Chat LLM Error: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            return "Désolé, je rencontre des difficultés techniques. Veuillez réessayer plus tard."
+            logger.error(f"Error generating chat response: {e}")
+            return "I'm sorry, I'm having trouble thinking right now. Please try again later."
 
 llm_service = LLMService()

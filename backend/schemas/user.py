@@ -43,6 +43,8 @@ class UserAdminUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    validation_status: Optional[str] = None
+    permissions: Optional[dict] = None
     
     # Profile Fields
     first_name: Optional[str] = None
@@ -58,6 +60,8 @@ class UserAdminUpdate(BaseModel):
 class UserResponse(UserBase):
     id: UUID
     is_active: bool
+    validation_status: str
+    permissions: dict = {}
     created_at: datetime
     last_login: Optional[datetime] = None
 

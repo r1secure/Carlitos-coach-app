@@ -38,22 +38,21 @@ export default function ProfilePage() {
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(profileSchema),
         defaultValues: {
-            first_name: '',
-            last_name: '',
-            birth_date: '',
-            ranking: '',
-            fft_club: '',
-            tenup_profile_url: '',
-            handedness: undefined,
-            backhand_style: undefined,
-            play_style: '',
+            first_name: user?.first_name || '',
+            last_name: user?.last_name || '',
+            birth_date: user?.birth_date ? new Date(user.birth_date).toISOString().split('T')[0] : '',
+            ranking: user?.ranking || '',
+            fft_club: user?.fft_club || '',
+            tenup_profile_url: user?.tenup_profile_url || '',
+            handedness: (user?.handedness as "RIGHT" | "LEFT") || undefined,
+            backhand_style: (user?.backhand_style as "ONE_HANDED" | "TWO_HANDED") || undefined,
+            play_style: user?.play_style || '',
         }
     })
 
-    // Populate form when user data is available
+    // Update form when user data changes (e.g. after refreshUser)
     useEffect(() => {
         if (user) {
-            console.log('ProfilePage: Populating form with user data', user)
             form.reset({
                 first_name: user.first_name || '',
                 last_name: user.last_name || '',

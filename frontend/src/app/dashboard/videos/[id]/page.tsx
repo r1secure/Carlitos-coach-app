@@ -164,13 +164,13 @@ export default function VideoPlayerPage() {
 
     const [feedbackLoading, setFeedbackLoading] = useState(false)
 
-    const generateFeedback = async () => {
+    const generateFeedback = async (force: boolean = false) => {
         setFeedbackLoading(true)
         try {
             const token = localStorage.getItem('access_token')
             const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
-            const res = await fetch(`${API_URL}/api/v1/videos/${id}/feedback`, {
+            const res = await fetch(`${API_URL}/api/v1/videos/${id}/feedback?force_regenerate=${force}`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${token}` }
             })
@@ -255,7 +255,11 @@ export default function VideoPlayerPage() {
 
                         <Dialog open={isReferenceDialogOpen} onOpenChange={setIsReferenceDialogOpen}>
                             <DialogTrigger asChild>
-                                <Button variant={comparisonMode ? "destructive" : "outline"} onClick={() => comparisonMode && setComparisonMode(false)}>
+                                <Button
+                                    variant={comparisonMode ? "destructive" : "default"}
+                                    className={!comparisonMode ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+                                    onClick={() => comparisonMode && setComparisonMode(false)}
+                                >
                                     {comparisonMode ? "Quitter Comparaison" : "Comparer"}
                                 </Button>
                             </DialogTrigger>
@@ -347,7 +351,7 @@ export default function VideoPlayerPage() {
                 {analysis && analysis.status === 'completed' && (
                     <FeedbackDisplay
                         feedback={analysis.ai_feedback}
-                        onGenerate={generateFeedback}
+                        onGenerate={() => generateFeedback(true)}
                         loading={feedbackLoading}
                     />
                 )}

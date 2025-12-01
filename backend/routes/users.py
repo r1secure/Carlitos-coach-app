@@ -84,3 +84,54 @@ async def update_user(
     db.commit()
     db.refresh(user)
     return user
+
+@router.put("/{user_id}/validate", response_model=UserResponse)
+async def validate_user(
+    *,
+    db: Session = Depends(get_db),
+    user_id: str,
+    status: str,
+    current_user: User = Depends(get_current_active_superuser),
+) -> Any:
+    """
+    Validate a user (Approve/Reject).
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="The user with this id does not exist in the system",
+        )
+    
+    if status not in ["PENDING", "APPROVED", "REJECTED"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+        
+    user.validation_status = status
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@router.put("/{user_id}/permissions", response_model=UserResponse)
+async def update_permissions(
+    *,
+    db: Session = Depends(get_db),
+    user_id: str,
+    permissions: dict,
+    current_user: User = Depends(get_current_active_superuser),
+) -> Any:
+    """
+    Update user permissions.
+    """
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail="The user with this id does not exist in the system",
+        )
+        
+    user.permissions = permissions
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
